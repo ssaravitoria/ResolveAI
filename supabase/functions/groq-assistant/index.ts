@@ -65,6 +65,8 @@ Deno.serve(async (req: Request) => {
       "NÃO invente informações, prazos, valores ou procedimentos que não estejam nas fontes.",
       "Quando a resposta incluir passos, liste-os em formato numerado.",
       "Mantenha um tom profissional e empático.",
+      "Use formatação Markdown simples (negrito com **, listas numeradas, tabelas Markdown quando útil).",
+      "NUNCA inclua tags HTML, SVG, código de programação, blocos de código ou qualquer marcação técnica. Responda apenas em texto natural com Markdown simples.",
     ].join(" ");
 
     const userPrompt = [

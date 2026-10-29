@@ -4,6 +4,7 @@ import type { ChatMessage, SessionRecord, View } from '@/lib/types';
 import { CATEGORY_LABELS, URGENCY_LABELS, URGENCY_STYLES } from '@/lib/types';
 import { resolveQuestion, getKnowledgeBase } from '@/lib/knowledge';
 import { callGroqAssistant } from '@/lib/groq';
+import { MarkdownText } from '@/components/MarkdownText';
 import { generateId } from '@/lib/seed';
 
 interface ChatPanelProps {
@@ -158,13 +159,17 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
             )}
             <div className={`max-w-[82%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
               <div
-                className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${
+                className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-sky-600 text-white rounded-tr-md'
+                    ? 'bg-sky-600 text-white rounded-tr-md whitespace-pre-line'
                     : 'bg-white border border-navy-100 text-navy-800 rounded-tl-md'
                 }`}
               >
-                {msg.text}
+                {msg.role === 'agent' ? (
+                  <MarkdownText content={msg.text} />
+                ) : (
+                  msg.text
+                )}
               </div>
 
               {msg.role === 'agent' && (msg.category || msg.urgency || msg.source || msg.forwarded) && (
