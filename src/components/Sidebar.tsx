@@ -1,4 +1,4 @@
-import { Bot, LayoutDashboard, MessageSquareText, BookOpen, X, Sparkles } from 'lucide-react';
+import { Bot, LayoutDashboard, MessageSquareText, BookOpen, X, Headphones, Cpu } from 'lucide-react';
 import type { View } from '@/lib/types';
 
 interface SidebarProps {
@@ -6,15 +6,17 @@ interface SidebarProps {
   setView: (view: View) => void;
   mobileOpen: boolean;
   setMobileOpen: (open: boolean) => void;
+  pendingCount?: number;
 }
 
 const NAV: { id: View; label: string; icon: typeof LayoutDashboard; description: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'Indicadores e gráficos' },
   { id: 'atendimentos', label: 'Atendimentos', icon: MessageSquareText, description: 'Chat e histórico' },
+  { id: 'solicitacoes', label: 'Atendimento humano', icon: Headphones, description: 'Solicitações e status' },
   { id: 'base', label: 'Base de conhecimento', icon: BookOpen, description: 'Artigos de suporte' },
 ];
 
-export function Sidebar({ view, setView, mobileOpen, setMobileOpen }: SidebarProps) {
+export function Sidebar({ view, setView, mobileOpen, setMobileOpen, pendingCount }: SidebarProps) {
   const handleSelect = (v: View) => {
     setView(v);
     setMobileOpen(false);
@@ -40,7 +42,7 @@ export function Sidebar({ view, setView, mobileOpen, setMobileOpen }: SidebarPro
             </div>
             <div>
               <h1 className="text-lg font-bold leading-tight">ResolveAI</h1>
-              <p className="text-xs text-navy-200">Atendimento inteligente</p>
+              <p className="text-xs text-navy-200">Assistente com IA</p>
             </div>
           </div>
           <button
@@ -52,7 +54,7 @@ export function Sidebar({ view, setView, mobileOpen, setMobileOpen }: SidebarPro
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
@@ -67,13 +69,18 @@ export function Sidebar({ view, setView, mobileOpen, setMobileOpen }: SidebarPro
                 }`}
               >
                 <div
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors relative ${
                     active ? 'bg-sky-500 text-white' : 'bg-white/5 text-navy-100 group-hover:bg-white/10'
                   }`}
                 >
                   <Icon className="w-4.5 h-4.5" />
+                  {item.id === 'solicitacoes' && pendingCount !== undefined && pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4.5 h-4.5 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-navy-900">
+                      {pendingCount > 9 ? '9+' : pendingCount}
+                    </span>
+                  )}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium leading-tight">{item.label}</p>
                   <p className="text-xs text-navy-200 mt-0.5 truncate">{item.description}</p>
                 </div>
@@ -85,11 +92,15 @@ export function Sidebar({ view, setView, mobileOpen, setMobileOpen }: SidebarPro
         <div className="px-4 py-4 border-t border-white/10">
           <div className="rounded-xl bg-gradient-to-br from-navy-800 to-navy-950 border border-white/10 p-4">
             <div className="flex items-center gap-2 mb-1.5">
-              <Sparkles className="w-4 h-4 text-sky-300" />
-              <p className="text-sm font-semibold text-white">Versão de demonstração</p>
+              <Cpu className="w-4 h-4 text-sky-300" />
+              <p className="text-sm font-semibold text-white">ResolveAI</p>
+              <span className="ml-auto inline-flex items-center gap-1 text-xs text-sky-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulseDot" />
+                Online
+              </span>
             </div>
             <p className="text-xs text-navy-100 leading-relaxed">
-              Respostas baseadas em uma central de conhecimento local. Pronta para integração com uma API de IA.
+              Atendimento inteligente baseado em uma central de conhecimento.
             </p>
           </div>
         </div>

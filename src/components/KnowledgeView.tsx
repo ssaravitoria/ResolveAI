@@ -1,17 +1,45 @@
 import { useState } from 'react';
-import { Search, BookOpen, ListChecks, FileText, ArrowRight } from 'lucide-react';
+import { Search, BookOpen, ListChecks, FileText, ArrowRight, Plus, Pencil, Trash2, X, AlertTriangle, CheckCircle2, Loader } from 'lucide-react';
 import type { Category, KnowledgeArticle } from '@/lib/types';
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '@/lib/types';
+import {
+  insertKnowledgeArticle,
+  updateKnowledgeArticle,
+  deleteKnowledgeArticle,
+} from '@/lib/db';
+import { generateId } from '@/lib/seed';
+
 const CATEGORIES: Category[] = ['entrega', 'pagamento', 'cancelamento', 'reembolso', 'conta', 'tecnico', 'seguranca'];
 
 interface KnowledgeViewProps {
   articles: KnowledgeArticle[];
+  onArticlesChange: () => void;
 }
 
-export function KnowledgeView({ articles }: KnowledgeViewProps) {
+interface EditState {
+  mode: 'create' | 'edit';
+  article: KnowledgeArticle;
+}
+
+const EMPTY_ARTICLE: KnowledgeArticle = {
+  id: '',
+  category: 'entrega',
+  title: '',
+  problem: '',
+  solution: '',
+  steps: [],
+  tags: [],
+};
+
+export function KnowledgeView({ articles, onArticlesChange }: KnowledgeViewProps) {
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category | 'todas'>('todas');
   const [selected, setSelected] = useState<KnowledgeArticle | null>(null);
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<KnowledgeArticle | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const filtered = articles.filter((article) => {
     const matchesCategory = activeCategory === 'todas' || article.category === activeCategory;
@@ -24,14 +52,98 @@ export function KnowledgeView({ articles }: KnowledgeViewProps) {
     return matchesCategory && matchesQuery;
   });
 
+  const handleSave = async () => {
+    if (!editState) return;
+    const a = editState.article;
+    if (!a.title.trim() || !a.problem.trim() || !a.solution.trim()) {
+      setSaveError('Preencha título, problema e solução.');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+    try {
+      if (editState.mode === 'create') {
+        await insertKnowledgeArticle({
+          ...a,
+          id: generateId('art'),
+        });
+        setSaveSuccess('Artigo criado com sucesso.');
+      } else {
+        await updateKnowledgeArticle(a);
+        setSaveSuccess('Artigo atualizado com sucesso.');
+      }
+      setEditState(null);
+      onArticlesChange();
+    } catch {
+      setSaveError('Erro ao salvar artigo. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await deleteKnowledgeArticle(deleteTarget.id);
+      if (selected?.id === deleteTarget.id) setSelected(null);
+      setDeleteTarget(null);
+      onArticlesChange();
+      setSaveSuccess('Artigo excluído com sucesso.');
+    } catch {
+      setSaveError('Erro ao excluir artigo. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateField = <K extends keyof KnowledgeArticle>(key: K, value: KnowledgeArticle[K]) => {
+    if (!editState) return;
+    setEditState({ ...editState, article: { ...editState.article, [key]: value } });
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn">
-      <div>
-        <h1 className="text-2xl font-bold text-navy-900">Base de conhecimento</h1>
-        <p className="text-navy-400 mt-1">
-          Artigos consultados pelo assistente para responder aos atendimentos.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-navy-900">Base de conhecimento</h1>
+          <p className="text-navy-400 mt-1">
+            Artigos consultados pelo assistente para responder aos atendimentos.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            setEditState({ mode: 'create', article: { ...EMPTY_ARTICLE } });
+            setSaveError(null);
+            setSaveSuccess(null);
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition-colors shadow-sm"
+        >
+          <Plus className="w-4 h-4" /> Novo artigo
+        </button>
       </div>
+
+      {saveSuccess && (
+        <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          {saveSuccess}
+          <button onClick={() => setSaveSuccess(null)} className="ml-auto text-emerald-500 hover:text-emerald-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {saveError}
+          <button onClick={() => setSaveError(null)} className="ml-auto text-red-500 hover:text-red-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-navy-300" />
@@ -79,25 +191,44 @@ export function KnowledgeView({ articles }: KnowledgeViewProps) {
             </div>
           ) : (
             filtered.map((article) => (
-              <button
+              <div
                 key={article.id}
-                onClick={() => setSelected(article)}
                 className={`w-full text-left p-4 rounded-xl border transition-all ${
                   selected?.id === article.id
                     ? 'border-sky-300 bg-sky-50 shadow-sm'
                     : 'border-navy-100 bg-white hover:border-navy-200 hover:shadow-card'
                 }`}
               >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: CATEGORY_COLORS[article.category] }}
-                  />
-                  <span className="text-xs font-medium text-navy-400">{CATEGORY_LABELS[article.category]}</span>
+                <button onClick={() => setSelected(article)} className="w-full text-left">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: CATEGORY_COLORS[article.category] }}
+                    />
+                    <span className="text-xs font-medium text-navy-400">{CATEGORY_LABELS[article.category]}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-navy-800 leading-snug">{article.title}</p>
+                  <p className="text-xs text-navy-400 mt-1.5 line-clamp-2">{article.solution}</p>
+                </button>
+                <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-navy-50">
+                  <button
+                    onClick={() => {
+                      setEditState({ mode: 'edit', article: { ...article } });
+                      setSaveError(null);
+                      setSaveSuccess(null);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-navy-500 hover:text-sky-700 hover:bg-sky-50 transition-colors"
+                  >
+                    <Pencil className="w-3 h-3" /> Editar
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(article)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-navy-500 hover:text-red-700 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Excluir
+                  </button>
                 </div>
-                <p className="text-sm font-semibold text-navy-800 leading-snug">{article.title}</p>
-                <p className="text-xs text-navy-400 mt-1.5 line-clamp-2">{article.solution}</p>
-              </button>
+              </div>
             ))
           )}
         </div>
@@ -165,6 +296,195 @@ export function KnowledgeView({ articles }: KnowledgeViewProps) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {editState && (
+        <ArticleEditor
+          editState={editState}
+          saving={saving}
+          error={saveError}
+          onClose={() => setEditState(null)}
+          onSave={handleSave}
+          updateField={updateField}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteConfirm
+          article={deleteTarget}
+          saving={saving}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+function ArticleEditor({
+  editState,
+  saving,
+  error,
+  onClose,
+  onSave,
+  updateField,
+}: {
+  editState: EditState;
+  saving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSave: () => void;
+  updateField: <K extends keyof KnowledgeArticle>(key: K, value: KnowledgeArticle[K]) => void;
+}) {
+  const a = editState.article;
+  const stepsText = (a.steps ?? []).join('\n');
+  const tagsText = a.tags.join(', ');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/40 backdrop-blur-sm">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin rounded-2xl bg-white shadow-xl border border-navy-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-navy-100">
+          <h2 className="text-lg font-bold text-navy-900">
+            {editState.mode === 'create' ? 'Novo artigo' : 'Editar artigo'}
+          </h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-navy-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {error && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-navy-400 mb-1.5">Título</label>
+            <input
+              value={a.title}
+              onChange={(e) => updateField('title', e.target.value)}
+              placeholder="Título do artigo"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-navy-100 bg-slate-50 text-sm text-navy-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-navy-400 mb-1.5">Categoria</label>
+            <select
+              value={a.category}
+              onChange={(e) => updateField('category', e.target.value as Category)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-navy-100 bg-slate-50 text-sm text-navy-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
+            >
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{CATEGORY_LABELS[cat]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-navy-400 mb-1.5">Problema (palavras-chave para busca)</label>
+            <textarea
+              value={a.problem}
+              onChange={(e) => updateField('problem', e.target.value)}
+              placeholder="Descreva o problema que este artigo resolve"
+              rows={2}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-navy-100 bg-slate-50 text-sm text-navy-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-navy-400 mb-1.5">Solução</label>
+            <textarea
+              value={a.solution}
+              onChange={(e) => updateField('solution', e.target.value)}
+              placeholder="Descreva a solução apresentada ao usuário"
+              rows={4}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-navy-100 bg-slate-50 text-sm text-navy-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-navy-400 mb-1.5">Passos (um por linha)</label>
+            <textarea
+              value={stepsText}
+              onChange={(e) => updateField('steps', e.target.value.split('\n').filter((s) => s.trim()))}
+              placeholder={'Passo 1\nPasso 2\nPasso 3'}
+              rows={4}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-navy-100 bg-slate-50 text-sm text-navy-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-navy-400 mb-1.5">Palavras-chave (separadas por vírgula)</label>
+            <input
+              value={tagsText}
+              onChange={(e) => updateField('tags', e.target.value.split(',').map((t) => t.trim()).filter((t) => t))}
+              placeholder="rastreio, pedido, transportadora"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-navy-100 bg-slate-50 text-sm text-navy-800 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-navy-100">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-medium text-navy-500 border border-navy-100 hover:bg-slate-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            {saving ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteConfirm({
+  article,
+  saving,
+  onCancel,
+  onConfirm,
+}: {
+  article: KnowledgeArticle;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/40 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-navy-100 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-navy-900">Excluir artigo</h2>
+            <p className="text-sm text-navy-400">Esta ação não pode ser desfeita.</p>
+          </div>
+        </div>
+        <p className="text-sm text-navy-700 mb-5">
+          Tem certeza que deseja excluir o artigo <strong>"{article.title}"</strong>?
+          Ele será removido permanentemente da base de conhecimento.
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={saving}
+            className="px-4 py-2 rounded-xl text-sm font-medium text-navy-500 border border-navy-100 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            {saving ? 'Excluindo...' : 'Excluir'}
+          </button>
         </div>
       </div>
     </div>

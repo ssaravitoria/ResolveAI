@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, ArrowUpRight, AlertTriangle, ShieldAlert, BookOpen } from 'lucide-react';
-import type { ChatMessage, SessionRecord, View } from '@/lib/types';
+import { Send, Bot, User, ArrowUpRight, AlertTriangle, ShieldAlert, BookOpen, ThumbsUp, ThumbsDown, Headphones } from 'lucide-react';
+import type { ChatMessage, Feedback, SessionRecord, View } from '@/lib/types';
 import { CATEGORY_LABELS, URGENCY_LABELS, URGENCY_STYLES } from '@/lib/types';
 import { resolveQuestion } from '@/lib/knowledge';
 import { callGroqAssistant } from '@/lib/groq';
@@ -11,6 +11,8 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   onResolved: (record: SessionRecord) => void;
+  onFeedback: (recordId: string, feedback: Feedback) => void;
+  onHumanRequest: (question: string, category: string | null, reason: string, attendanceRecordId: string | null) => void;
   onNavigate: (view: View) => void;
 }
 
@@ -21,7 +23,7 @@ const SUGGESTIONS = [
   'Minha conta foi invadida e estão fazendo compras sem autorização',
 ];
 
-export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: ChatPanelProps) {
+export function ChatPanel({ messages, setMessages, onResolved, onFeedback, onHumanRequest, onNavigate }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -31,6 +33,14 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, typing]);
+
+  const handleFeedback = (msg: ChatMessage, value: Feedback) => {
+    if (msg.feedback) return;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, feedback: value } : m)),
+    );
+    onFeedback(msg.id, value);
+  };
 
   const send = (text: string) => {
     const trimmed = text.trim();
@@ -51,8 +61,9 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
     if (result.critical || result.forwarded || !result.article) {
       const delay = 400 + Math.min(trimmed.length * 4, 500);
       window.setTimeout(() => {
+        const recordId = generateId('rec');
         const agentMsg: ChatMessage = {
-          id: generateId('msg'),
+          id: recordId,
           role: 'agent',
           text: result.text,
           category: result.category ?? undefined,
@@ -60,13 +71,14 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
           source: null,
           forwarded: result.forwarded,
           critical: result.critical,
+          feedback: null,
           createdAt: Date.now(),
         };
         setMessages((prev) => [...prev, agentMsg]);
         setTyping(false);
 
         onResolved({
-          id: generateId('rec'),
+          id: recordId,
           question: trimmed,
           category: result.category,
           urgency: result.urgency,
@@ -86,9 +98,10 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
         : [];
 
     callGroqAssistant(trimmed, contextArticles).then((groqResult) => {
+      const recordId = generateId('rec');
       const agentText = groqResult.error ? `${groqResult.text}\n\n${result.text}` : groqResult.text;
       const agentMsg: ChatMessage = {
-        id: generateId('msg'),
+        id: recordId,
         role: 'agent',
         text: agentText,
         category: result.category ?? undefined,
@@ -96,13 +109,14 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
         source: matchedArticle ? { articleId: matchedArticle.id, title: matchedArticle.title } : null,
         forwarded: false,
         critical: false,
+        feedback: null,
         createdAt: Date.now(),
       };
       setMessages((prev) => [...prev, agentMsg]);
       setTyping(false);
 
       onResolved({
-        id: generateId('rec'),
+        id: recordId,
         question: trimmed,
         category: result.category,
         urgency: result.urgency,
@@ -111,6 +125,15 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
         createdAt: agentMsg.createdAt,
       });
     });
+  };
+
+  const requestHuman = (msg: ChatMessage) => {
+    onHumanRequest(msg.text, msg.category ?? null, 'user_requested', msg.id);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msg.id ? { ...m, forwarded: true } : m,
+      ),
+    );
   };
 
   return (
@@ -209,6 +232,53 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
                   Fonte: {msg.source.title}
                   <ArrowUpRight className="w-3 h-3" />
                 </button>
+              )}
+
+              {msg.role === 'agent' && !msg.critical && !msg.forwarded && !msg.feedback && (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="text-xs text-navy-400">Esta resposta foi útil?</span>
+                  <button
+                    onClick={() => handleFeedback(msg, 'sim')}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-white border border-navy-100 text-navy-500 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                  >
+                    <ThumbsUp className="w-3 h-3" /> Sim
+                  </button>
+                  <button
+                    onClick={() => handleFeedback(msg, 'nao')}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-white border border-navy-100 text-navy-500 hover:border-rose-300 hover:text-rose-700 hover:bg-rose-50 transition-colors"
+                  >
+                    <ThumbsDown className="w-3 h-3" /> Não
+                  </button>
+                </div>
+              )}
+
+              {msg.role === 'agent' && msg.feedback && (
+                <div className="mt-1 text-xs text-navy-400">
+                  {msg.feedback === 'sim' ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-600">
+                      <ThumbsUp className="w-3 h-3" /> Resposta marcada como útil
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-rose-500">
+                      <ThumbsDown className="w-3 h-3" /> Resposta marcada como não útil
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {msg.role === 'agent' && msg.feedback === 'nao' && !msg.forwarded && (
+                <button
+                  onClick={() => requestHuman(msg)}
+                  className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                >
+                  <Headphones className="w-3 h-3" /> Solicitar atendimento humano
+                </button>
+              )}
+
+              {msg.role === 'agent' && msg.forwarded && !msg.critical && (
+                <span className="mt-1 text-xs text-navy-400">
+                  Solicitação registrada. Acompanhe o status na tela de atendimento humano.
+                </span>
               )}
             </div>
             {msg.role === 'user' && (

@@ -9,9 +9,13 @@ export type Category =
 
 export type Urgency = 'baixa' | 'media' | 'alta' | 'critica';
 
-export type View = 'dashboard' | 'atendimentos' | 'base';
+export type View = 'dashboard' | 'atendimentos' | 'base' | 'solicitacoes';
 
 export type SessionStatus = 'resolvido' | 'encaminhado' | 'encaminhado_humano';
+
+export type Feedback = 'sim' | 'nao';
+
+export type HumanRequestStatus = 'pendente' | 'em_atendimento' | 'resolvido';
 
 export interface KnowledgeArticle {
   id: string;
@@ -32,6 +36,7 @@ export interface ChatMessage {
   source?: { articleId: string; title: string } | null;
   forwarded?: boolean;
   critical?: boolean;
+  feedback?: Feedback | null;
   createdAt: number;
 }
 
@@ -42,7 +47,19 @@ export interface SessionRecord {
   urgency: Urgency | null;
   status: SessionStatus;
   source: { articleId: string; title: string } | null;
+  feedback?: Feedback | null;
   createdAt: number;
+}
+
+export interface HumanRequest {
+  id: string;
+  question: string;
+  category: Category | null;
+  reason: string | null;
+  status: HumanRequestStatus;
+  attendanceRecordId: string | null;
+  createdAt: number;
+  resolvedAt: number | null;
 }
 
 export const CATEGORY_LABELS: Record<Category, string> = {
@@ -83,4 +100,16 @@ export const STATUS_LABELS: Record<SessionStatus, string> = {
   resolvido: 'Resolvido',
   encaminhado: 'Encaminhado',
   encaminhado_humano: 'Encaminhado a humano',
+};
+
+export const HUMAN_REQUEST_STATUS_LABELS: Record<HumanRequestStatus, string> = {
+  pendente: 'Pendente',
+  em_atendimento: 'Em atendimento',
+  resolvido: 'Resolvido',
+};
+
+export const HUMAN_REQUEST_STATUS_STYLES: Record<HumanRequestStatus, string> = {
+  pendente: 'bg-amber-100 text-amber-700 border-amber-200',
+  em_atendimento: 'bg-sky-100 text-sky-700 border-sky-200',
+  resolvido: 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
