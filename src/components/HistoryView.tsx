@@ -1,24 +1,35 @@
 import { useState } from 'react';
-import { Search, Inbox, Filter, CheckCircle2, Forward, ShieldAlert, BookOpen, Clock } from 'lucide-react';
+import { Search, Inbox, Filter, CheckCircle2, Forward, ShieldAlert, BookOpen, Clock, Calendar } from 'lucide-react';
 import type { SessionRecord } from '@/lib/types';
 import { CATEGORY_LABELS, URGENCY_LABELS, URGENCY_STYLES, STATUS_LABELS } from '@/lib/types';
 import { formatTime } from '@/lib/seed';
 
 interface HistoryViewProps {
   history: SessionRecord[];
-  onNavigate: (view: 'base') => void;
+  onNavigate: (view: 'base' | 'solicitacoes') => void;
 }
 
 type StatusFilter = 'todos' | 'resolvido' | 'encaminhado' | 'encaminhado_humano';
+type PeriodFilter = 'todos' | 'hoje' | 'semana' | 'mes';
 
 export function HistoryView({ history, onNavigate }: HistoryViewProps) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos');
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>('todos');
+
+  const now = Date.now();
+  const periodMs: Record<PeriodFilter, number> = {
+    todos: Infinity,
+    hoje: 24 * 60 * 60 * 1000,
+    semana: 7 * 24 * 60 * 60 * 1000,
+    mes: 30 * 24 * 60 * 60 * 1000,
+  };
 
   const filtered = history.filter((rec) => {
     const matchesQuery = rec.question.toLowerCase().includes(query.toLowerCase());
     const matchesStatus = statusFilter === 'todos' || rec.status === statusFilter;
-    return matchesQuery && matchesStatus;
+    const matchesPeriod = periodFilter === 'todos' || now - rec.createdAt <= periodMs[periodFilter];
+    return matchesQuery && matchesStatus && matchesPeriod;
   });
 
   const sorted = [...filtered].sort((a, b) => b.createdAt - a.createdAt);
@@ -27,8 +38,8 @@ export function HistoryView({ history, onNavigate }: HistoryViewProps) {
     <div className="space-y-6 animate-fadeIn">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-navy-900">Atendimentos</h1>
-          <p className="text-navy-400 mt-1">Histórico de solicitações processadas nesta sessão.</p>
+          <h2 className="text-xl font-bold text-navy-900">Histórico de atendimentos</h2>
+          <p className="text-navy-400 mt-1">Solicitações processadas e registradas no sistema.</p>
         </div>
         <div className="flex items-center gap-2 text-sm text-navy-500">
           <Inbox className="w-4 h-4" />
@@ -46,21 +57,39 @@ export function HistoryView({ history, onNavigate }: HistoryViewProps) {
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-navy-100 bg-white text-sm text-navy-800 placeholder:text-navy-300 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-transparent"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-navy-400" />
-          {(['todos', 'resolvido', 'encaminhado'] as StatusFilter[]).map((opt) => (
-            <button
-              key={opt}
-              onClick={() => setStatusFilter(opt)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-                statusFilter === opt
-                  ? 'bg-navy-700 text-white'
-                  : 'bg-white text-navy-500 border border-navy-100 hover:border-navy-200'
-              }`}
-            >
-              {opt === 'todos' ? 'Todos' : opt === 'resolvido' ? 'Resolvidos' : 'Encaminhados'}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-4 h-4 text-navy-400" />
+            {(['todos', 'hoje', 'semana', 'mes'] as PeriodFilter[]).map((opt) => (
+              <button
+                key={opt}
+                onClick={() => setPeriodFilter(opt)}
+                className={`px-2.5 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                  periodFilter === opt
+                    ? 'bg-navy-700 text-white'
+                    : 'bg-white text-navy-500 border border-navy-100 hover:border-navy-200'
+                }`}
+              >
+                {opt === 'todos' ? 'Tudo' : opt === 'hoje' ? 'Hoje' : opt === 'semana' ? 'Semana' : 'Mês'}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-4 h-4 text-navy-400" />
+            {(['todos', 'resolvido', 'encaminhado', 'encaminhado_humano'] as StatusFilter[]).map((opt) => (
+              <button
+                key={opt}
+                onClick={() => setStatusFilter(opt)}
+                className={`px-2.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  statusFilter === opt
+                    ? 'bg-navy-700 text-white'
+                    : 'bg-white text-navy-500 border border-navy-100 hover:border-navy-200'
+                }`}
+              >
+                {opt === 'todos' ? 'Todos' : opt === 'resolvido' ? 'Resolvidos' : opt === 'encaminhado' ? 'Encaminhados' : 'Críticos'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

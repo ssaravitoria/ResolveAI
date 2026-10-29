@@ -5,9 +5,17 @@ import { Dashboard } from '@/components/Dashboard';
 import { ChatPanel } from '@/components/ChatPanel';
 import { HistoryView } from '@/components/HistoryView';
 import { KnowledgeView } from '@/components/KnowledgeView';
-import type { Category, ChatMessage, KnowledgeArticle, SessionRecord, View } from '@/lib/types';
+import { HumanRequestsView } from '@/components/HumanRequestsView';
+import type { Category, ChatMessage, Feedback, HumanRequest, KnowledgeArticle, SessionRecord, View } from '@/lib/types';
 import { knowledgeBase, setActiveKnowledgeBase } from '@/lib/knowledge';
-import { fetchKnowledgeArticles, fetchAttendanceRecords, insertAttendanceRecord } from '@/lib/db';
+import {
+  fetchKnowledgeArticles,
+  fetchAttendanceRecords,
+  fetchHumanRequests,
+  insertAttendanceRecord,
+  updateAttendanceFeedback,
+  insertHumanRequest,
+} from '@/lib/db';
 import { generateId } from '@/lib/seed';
 
 const INITIAL_MESSAGES: ChatMessage[] = [];
@@ -20,6 +28,7 @@ function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [history, setHistory] = useState<SessionRecord[]>([]);
   const [articles, setArticles] = useState<KnowledgeArticle[]>(knowledgeBase);
+  const [humanRequests, setHumanRequests] = useState<HumanRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
 
@@ -30,14 +39,16 @@ function App() {
       setLoading(true);
       setDbError(null);
       try {
-        const [dbArticles, dbRecords] = await Promise.all([
+        const [dbArticles, dbRecords, dbRequests] = await Promise.all([
           fetchKnowledgeArticles(),
           fetchAttendanceRecords(),
+          fetchHumanRequests(),
         ]);
         if (cancelled) return;
         setActiveKnowledgeBase(dbArticles);
         setArticles(dbArticles);
         setHistory(dbRecords);
+        setHumanRequests(dbRequests);
       } catch (err) {
         if (cancelled) return;
         setDbError(err instanceof Error ? err.message : 'Erro ao carregar dados do banco.');
@@ -53,7 +64,7 @@ function App() {
   }, []);
 
   const addRecord = async (record: SessionRecord) => {
-    const recordWithId: SessionRecord = { ...record, id: generateId('rec') };
+    const recordWithId: SessionRecord = { ...record, id: record.id };
     setHistory((prev) => [recordWithId, ...prev]);
 
     try {
@@ -65,6 +76,61 @@ function App() {
       console.error('Falha ao salvar atendimento no banco:', err);
     }
   };
+
+  const handleFeedback = async (recordId: string, feedback: Feedback) => {
+    setHistory((prev) =>
+      prev.map((r) => (r.id === recordId ? { ...r, feedback } : r)),
+    );
+    try {
+      await updateAttendanceFeedback(recordId, feedback);
+    } catch (err) {
+      console.error('Falha ao salvar avaliação:', err);
+    }
+  };
+
+  const handleHumanRequest = async (
+    question: string,
+    category: string | null,
+    reason: string,
+    attendanceRecordId: string | null,
+  ) => {
+    const newRequest: Omit<HumanRequest, 'createdAt' | 'resolvedAt'> = {
+      id: generateId('hr'),
+      question,
+      category: category as Category | null,
+      reason,
+      status: 'pendente',
+      attendanceRecordId,
+    };
+
+    try {
+      const saved = await insertHumanRequest(newRequest);
+      setHumanRequests((prev) => [saved, ...prev]);
+    } catch (err) {
+      console.error('Falha ao registrar solicitação humana:', err);
+    }
+  };
+
+  const refreshArticles = async () => {
+    try {
+      const dbArticles = await fetchKnowledgeArticles();
+      setActiveKnowledgeBase(dbArticles);
+      setArticles(dbArticles);
+    } catch (err) {
+      console.error('Falha ao recarregar artigos:', err);
+    }
+  };
+
+  const refreshHumanRequests = async () => {
+    try {
+      const dbRequests = await fetchHumanRequests();
+      setHumanRequests(dbRequests);
+    } catch (err) {
+      console.error('Falha ao recarregar solicitações:', err);
+    }
+  };
+
+  const pendingCount = humanRequests.filter((r) => r.status === 'pendente').length;
 
   const categoryData = useMemo(() => {
     const data = Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<Category, number>;
@@ -78,7 +144,7 @@ function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar view={view} setView={setView} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+      <Sidebar view={view} setView={setView} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} pendingCount={pendingCount} />
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-navy-100">
@@ -117,6 +183,7 @@ function App() {
               {view === 'dashboard' && (
                 <Dashboard
                   history={history}
+                  humanRequests={humanRequests}
                   categoryData={categoryData}
                   onNavigate={(v) => setView(v)}
                 />
@@ -136,6 +203,8 @@ function App() {
                       messages={messages}
                       setMessages={setMessages}
                       onResolved={addRecord}
+                      onFeedback={handleFeedback}
+                      onHumanRequest={handleHumanRequest}
                       onNavigate={(v) => setView(v)}
                     />
                   </div>
@@ -144,7 +213,21 @@ function App() {
                 </div>
               )}
 
-              {view === 'base' && <KnowledgeView articles={articles} />}
+              {view === 'solicitacoes' && (
+                <HumanRequestsView
+                  requests={humanRequests}
+                  onUpdate={(updated) => {
+                    setHumanRequests((prev) =>
+                      prev.map((r) => (r.id === updated.id ? updated : r)),
+                    );
+                    refreshHumanRequests();
+                  }}
+                />
+              )}
+
+              {view === 'base' && (
+                <KnowledgeView articles={articles} onArticlesChange={refreshArticles} />
+              )}
             </>
           )}
         </main>
