@@ -21,6 +21,10 @@ O ResolveAI utiliza IA generativa para responder dúvidas com base em uma centra
 - Bolt.new
 
 ## 📸 Demonstração
+ResolveAI_artigo
+ResolveAi_base
+ResolveAi_chat
+ResolveAI_dash
 
 Acesse: https://resolveai-support-pl-ktoz.bolt.host/
 
