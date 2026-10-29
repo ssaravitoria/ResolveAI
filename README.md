@@ -22,17 +22,17 @@ O ResolveAI utiliza IA generativa para responder dúvidas com base em uma centra
 
 ## 📸 Demonstração do projeto
 
-### Artigo
-![Artigo do ResolveAI](screenshots/ResolveAI_artigo.png)
+### Dashboard
+![Dashboard do ResolveAI](screenshots/ResolveAI_dash.png)
 
 ### Base de conhecimento
 ![Base de conhecimento do ResolveAI](screenshots/ResolveAi_base.png)
 
+### Adicionar Artigo (adicionar informações na base de dados )
+![Artigo do ResolveAI](screenshots/ResolveAI_artigo.png)
+
 ### Chat com IA
 ![Chat com IA do ResolveAI](screenshots/ResolveAi_chat.png)
-
-### Dashboard
-![Dashboard do ResolveAI](screenshots/ResolveAI_dash.png)
 
 
 Acesse: https://resolveai-support-pl-ktoz.bolt.host/
