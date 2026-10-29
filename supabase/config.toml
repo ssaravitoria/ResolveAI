@@ -1,0 +1,5 @@
+project_id = "pthbiatlvxbzmsovrlwz"
+
+[functions.groq-assistant]
+verify_jwt = false
+entrypoint = "./functions/groq-assistant/index.ts"
