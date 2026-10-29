@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Send, Bot, User, ArrowUpRight, AlertTriangle, ShieldAlert, BookOpen } from 'lucide-react';
 import type { ChatMessage, SessionRecord, View } from '@/lib/types';
 import { CATEGORY_LABELS, URGENCY_LABELS, URGENCY_STYLES } from '@/lib/types';
-import { resolveQuestion, getKnowledgeBase } from '@/lib/knowledge';
+import { resolveQuestion } from '@/lib/knowledge';
 import { callGroqAssistant } from '@/lib/groq';
 import { MarkdownText } from '@/components/MarkdownText';
 import { generateId } from '@/lib/seed';
@@ -79,9 +79,11 @@ export function ChatPanel({ messages, setMessages, onResolved, onNavigate }: Cha
     }
 
     const matchedArticle = result.article;
-    const contextArticles = [matchedArticle, ...getKnowledgeBase()
-      .filter((a) => a.id !== matchedArticle.id && a.category === matchedArticle.category)
-      .slice(0, 2)];
+    const contextArticles = result.articles.length > 0
+      ? result.articles
+      : matchedArticle
+        ? [matchedArticle]
+        : [];
 
     callGroqAssistant(trimmed, contextArticles).then((groqResult) => {
       const agentText = groqResult.error ? `${groqResult.text}\n\n${result.text}` : groqResult.text;

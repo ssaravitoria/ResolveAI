@@ -325,6 +325,19 @@ export function classifyCategory(text: string): Category | null {
   return bestScore > 0 ? best : null;
 }
 
+export function classifyCategories(text: string, threshold = 1): Category[] {
+  const normalized = normalize(text);
+  const results: { category: Category; score: number }[] = [];
+  (Object.keys(CATEGORY_KEYWORDS) as Category[]).forEach((category) => {
+    const score = countMatches(normalized, CATEGORY_KEYWORDS[category]);
+    if (score >= threshold) {
+      results.push({ category, score });
+    }
+  });
+  results.sort((a, b) => b.score - a.score);
+  return results.map((r) => r.category);
+}
+
 export function classifyUrgency(text: string): Urgency {
   const normalized = normalize(text);
   let best: Urgency = 'media';
@@ -345,6 +358,11 @@ export interface MatchResult {
   score: number;
 }
 
+export interface RankedMatch {
+  article: KnowledgeArticle;
+  score: number;
+}
+
 let activeKnowledgeBase: KnowledgeArticle[] = knowledgeBase;
 
 export function setActiveKnowledgeBase(articles: KnowledgeArticle[]): void {
@@ -357,22 +375,27 @@ export function getKnowledgeBase(): KnowledgeArticle[] {
   return activeKnowledgeBase;
 }
 
+function scoreArticle(normalized: string, article: KnowledgeArticle, category: Category | null): number {
+  let score = 0;
+  for (const tag of article.tags) {
+    if (normalized.includes(normalize(tag))) score += 2;
+  }
+  const problemWords = normalize(article.problem).split(' ');
+  for (const word of problemWords) {
+    if (word.length > 3 && normalized.includes(word)) score += 1;
+  }
+  if (category && article.category === category) score += 3;
+  if (normalized.includes(normalize(article.title))) score += 4;
+  return score;
+}
+
 export function findBestArticle(text: string, category: Category | null): MatchResult {
   const normalized = normalize(text);
   let bestArticle: KnowledgeArticle | null = null;
   let bestScore = 0;
 
   for (const article of activeKnowledgeBase) {
-    let score = 0;
-    for (const tag of article.tags) {
-      if (normalized.includes(normalize(tag))) score += 2;
-    }
-    const problemWords = normalize(article.problem).split(' ');
-    for (const word of problemWords) {
-      if (word.length > 3 && normalized.includes(word)) score += 1;
-    }
-    if (category && article.category === category) score += 3;
-    if (normalized.includes(normalize(article.title))) score += 4;
+    const score = scoreArticle(normalized, article, category);
     if (score > bestScore) {
       bestScore = score;
       bestArticle = article;
@@ -381,10 +404,25 @@ export function findBestArticle(text: string, category: Category | null): MatchR
   return { article: bestArticle, score: bestScore };
 }
 
+export function findRelevantArticles(text: string, categories: Category[], maxResults = 3): RankedMatch[] {
+  const normalized = normalize(text);
+  const scored = activeKnowledgeBase
+    .map((article) => {
+      const categoryBonus = categories.includes(article.category) ? 3 : 0;
+      const score = scoreArticle(normalized, article, null) + categoryBonus;
+      return { article, score };
+    })
+    .filter((m) => m.score >= 2)
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, maxResults);
+}
+
 export interface ResolutionResult {
   category: Category | null;
   urgency: Urgency;
   article: KnowledgeArticle | null;
+  articles: KnowledgeArticle[];
   forwarded: boolean;
   critical: boolean;
   text: string;
@@ -410,6 +448,7 @@ export function resolveQuestion(question: string): ResolutionResult {
       category: 'seguranca',
       urgency: 'critica',
       article: null,
+      articles: [],
       forwarded: true,
       critical: true,
       text: buildCriticalResponse(securityIncident.involvesPayment),
@@ -417,14 +456,20 @@ export function resolveQuestion(question: string): ResolutionResult {
   }
 
   const category = classifyCategory(question);
+  const categories = classifyCategories(question);
   const urgency = classifyUrgency(question);
   const { article, score } = findBestArticle(question, category);
+  const relevantArticles = findRelevantArticles(question, categories, 3);
+  const resolvedArticles = relevantArticles.length > 0
+    ? relevantArticles.map((m) => m.article)
+    : (article && score >= 2 ? [article] : []);
 
   if (!article || score < 2) {
     return {
       category,
       urgency,
       article: null,
+      articles: [],
       forwarded: true,
       critical: false,
       text:
@@ -442,6 +487,7 @@ export function resolveQuestion(question: string): ResolutionResult {
     category: article.category,
     urgency,
     article,
+    articles: resolvedArticles,
     forwarded: false,
     critical: false,
     text: `${article.solution}${stepsText}`,
