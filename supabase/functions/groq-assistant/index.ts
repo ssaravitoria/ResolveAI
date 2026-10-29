@@ -2,6 +2,7 @@
 // Receives a user question plus relevant knowledge-base context,
 // calls the Groq Cloud chat completions API, and returns the AI response.
 // The GROQ_API_KEY is read from server-side env — never exposed to the frontend.
+// Model: openai/gpt-oss-20b (updated from llama-3.3-70b-versatile)
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
